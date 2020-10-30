@@ -26,6 +26,7 @@
 #include <array>
 #include <utility>
 #include <bitset>
+#include <itkNeighborhoodIterator.h>
 
 namespace itk
 {
@@ -55,6 +56,130 @@ CuberilleImageToMeshFilter<TInputImage, TOutputMesh, TInterpolator>::SetInput(co
 
 template <typename TInputImage, typename TOutputMesh, typename TInterpolator>
 void
+CuberilleImageToMeshFilter<TInputImage, TOutputMesh, TInterpolator>::RemoveProblematicPixels(InputImagePointer image)
+{
+  typename itk::ConstNeighborhoodIterator<InputImageType>::SizeType radius;
+  radius.Fill(1);
+
+  itk::ConstNeighborhoodIterator<InputImageType> it(radius, image, image->GetLargestPossibleRegion());
+
+  this->m_ProblematicPixels.clear();
+
+  for (it.GoToBegin(); !it.IsAtEnd(); ++it)
+  {
+
+    // Calculate the number of vertices required for the -X, -Y, -Z vertex.
+    // If the number is not equal to 1, continue.
+    const auto central_bitmask_ID = this->CalculateBitmaskIDForVertexIndex(it.GetIndex());
+    const auto central_components = this->m_LabelsArray.at(central_bitmask_ID);
+    const auto num_central_components = (*std::max_element(central_components.begin(), central_components.end())) + 1;
+    if (1 != num_central_components)
+    {
+      continue;
+    }
+
+    const auto c = it.Size() / 2;
+    const auto xS = it.GetStride(0);
+    const auto yS = it.GetStride(1);
+    const auto zS = it.GetStride(2);
+
+    // -X, -Y
+    const auto xy_bitmask_ID =
+      this->CalculateBitmaskIDForVertexIndex({ it.GetIndex()[0], it.GetIndex()[1], it.GetIndex()[2] + 1 });
+    const auto xy_components = this->m_LabelsArray.at(xy_bitmask_ID);
+    const auto num_xy_components = (*std::max_element(xy_components.begin(), xy_components.end())) + 1;
+    if (1 == num_xy_components)
+    {
+      const auto cccP = it.GetCenterPixel();
+      const auto nccP = it.GetPixel(c - xS);
+      const auto cncP = it.GetPixel(c - yS);
+      const auto nncP = it.GetPixel(c - xS - yS);
+
+      const bool xy0 = cccP == 0 && nncP == 0 && nccP != 0 && cncP != 0;
+      const bool xy1 = cccP != 0 && nncP != 0 && nccP == 0 && cncP == 0;
+
+      if (xy0 || xy1)
+      {
+        const auto id0 = it.GetIndex();
+        const auto id1 = IndexType{ id0[0] - 1, id0[1] - 1, id0[2] };
+        const auto id2 = IndexType{ id0[0], id0[1] - 1, id0[2] };
+        const auto id3 = IndexType{ id0[0] - 1, id0[1], id0[2] };
+        this->m_ProblematicPixels.emplace(id0);
+        this->m_ProblematicPixels.emplace(id1);
+        this->m_ProblematicPixels.emplace(id2);
+        this->m_ProblematicPixels.emplace(id3);
+      }
+    }
+
+    // -X, -Z
+    const auto xz_bitmask_ID =
+      this->CalculateBitmaskIDForVertexIndex({ it.GetIndex()[0], it.GetIndex()[1] + 1, it.GetIndex()[2] });
+    const auto xz_components = this->m_LabelsArray.at(xz_bitmask_ID);
+    const auto num_xz_components = (*std::max_element(xz_components.begin(), xz_components.end())) + 1;
+    if (1 == num_xz_components)
+    {
+      const auto cccP = it.GetCenterPixel();
+      const auto nccP = it.GetPixel(c - xS);
+      const auto ccnP = it.GetPixel(c - zS);
+      const auto ncnP = it.GetPixel(c - xS - zS);
+
+      const bool xz0 = cccP == 0 && ncnP == 0 && nccP != 0 && ccnP != 0;
+      const bool xz1 = cccP != 0 && ncnP != 0 && nccP == 0 && ccnP == 0;
+
+      if (xz0 || xz1)
+      {
+        const auto id0 = it.GetIndex();
+        const auto id1 = IndexType{ id0[0] - 1, id0[1], id0[2] - 1 };
+        const auto id2 = IndexType{ id0[0], id0[1], id0[2] - 1 };
+        const auto id3 = IndexType{ id0[0] - 1, id0[1], id0[2] };
+        this->m_ProblematicPixels.emplace(id0);
+        this->m_ProblematicPixels.emplace(id1);
+        this->m_ProblematicPixels.emplace(id2);
+        this->m_ProblematicPixels.emplace(id3);
+      }
+    }
+
+    // -Y, -Z
+    const auto yz_bitmask_ID =
+      this->CalculateBitmaskIDForVertexIndex({ it.GetIndex()[0] + 1, it.GetIndex()[1], it.GetIndex()[2] });
+    const auto yz_components = this->m_LabelsArray.at(yz_bitmask_ID);
+    const auto num_yz_components = (*std::max_element(yz_components.begin(), yz_components.end())) + 1;
+    if (1 == num_yz_components)
+    {
+      const auto cccP = it.GetCenterPixel();
+      const auto cncP = it.GetPixel(c - yS);
+      const auto ccnP = it.GetPixel(c - zS);
+      const auto cnnP = it.GetPixel(c - yS - zS);
+
+      const bool yz0 = cccP == 0 && cnnP == 0 && cncP != 0 && ccnP != 0;
+      const bool yz1 = cccP != 0 && cnnP != 0 && cncP == 0 && ccnP == 0;
+
+      if (yz0 || yz1)
+      {
+        const auto id0 = it.GetIndex();
+        const auto id1 = IndexType{ id0[0], id0[1] - 1, id0[2] - 1 };
+        const auto id2 = IndexType{ id0[0], id0[1], id0[2] - 1 };
+        const auto id3 = IndexType{ id0[0], id0[1] - 1, id0[2] };
+        this->m_ProblematicPixels.emplace(id0);
+        this->m_ProblematicPixels.emplace(id1);
+        this->m_ProblematicPixels.emplace(id2);
+        this->m_ProblematicPixels.emplace(id3);
+      }
+    }
+  }
+
+  if (!this->m_ProblematicPixels.empty())
+  {
+    for (const auto & p : this->m_ProblematicPixels)
+    {
+      image->SetPixel(p, 0);
+    }
+    this->RemoveProblematicPixels(image);
+  }
+}
+
+template <typename TInputImage, typename TOutputMesh, typename TInterpolator>
+void
 CuberilleImageToMeshFilter<TInputImage, TOutputMesh, TInterpolator>::GenerateData()
 {
 #if DEBUG_PRINT
@@ -64,8 +189,15 @@ CuberilleImageToMeshFilter<TInputImage, TOutputMesh, TInterpolator>::GenerateDat
 #endif
 
   // Get input/output
-  InputImageConstPointer           image = Superclass::GetInput(0);
+  InputImageConstPointer input = Superclass::GetInput(0);
+  const auto             image = InputImageType::New();
+  image->Graft(input);
   typename OutputMeshType::Pointer mesh = Superclass::GetOutput();
+
+  if (this->m_RemoveProblematicPixels)
+  {
+    this->RemoveProblematicPixels(image);
+  }
 
   // Compute maximum spacing
   m_MaxSpacing = image->GetSpacing().GetVnlVector().max_value();

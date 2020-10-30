@@ -205,6 +205,10 @@ public:
   itkSetMacro(GenerateTriangleFaces, bool);
   itkBooleanMacro(GenerateTriangleFaces);
 
+  itkGetMacro(RemoveProblematicPixels, bool);
+  itkSetMacro(RemoveProblematicPixels, bool);
+  itkBooleanMacro(RemoveProblematicPixels);
+
   /** Get/Set whether the vertices should be project to the iso-surface.
       Default = true. */
   itkGetMacro(ProjectVerticesToIsoSurface, bool);
@@ -403,11 +407,17 @@ private:
   size_t
   CalculateBitmaskIDForVertexIndex(const IndexType & vindex);
 
+  /** Remove pixels which currently result in non-manifold topology given the present mesh implementation. */
+  void
+  RemoveProblematicPixels(InputImagePointer image);
+
   using TLabel = signed char;
   using TLabels = std::array<TLabel, 8>;
   using TLabelsArray = std::array<TLabels, 256>;
 
-  TLabelsArray m_LabelsArray;
+  TLabelsArray        m_LabelsArray;
+  bool                m_RemoveProblematicPixels = false;
+  std::set<IndexType> m_ProblematicPixels;
 
   InputPixelType              m_IsoSurfaceValue;
   InterpolatorPointer         m_Interpolator;
