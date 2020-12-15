@@ -802,7 +802,10 @@ CuberilleImageToMeshFilter<TInputImage, TOutputMesh, TInterpolator>::CalculateBi
     offset[1] = bits[1];
     offset[2] = bits[2];
     const auto index = localorigin + offset;
-    const auto pixel = this->GetInput()->GetPixel(index);
+    typename TInputImage::PixelType pixel = this->m_IsoSurfaceValue - 1;
+    if (this->GetInput()->GetLargestPossibleRegion().IsInside( index )) {
+      pixel = this->GetInput()->GetPixel(index);
+    }
     bitmask[i] = (pixel >= this->m_IsoSurfaceValue);
   }
   return static_cast<size_t>(bitmask.to_ulong());
